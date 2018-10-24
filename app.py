@@ -15,6 +15,10 @@ from flask import make_response
 import requests
 from fieldsLocal import *
 import sys, pprint
+from datetime import timedelta
+from flask import make_response, request, current_app
+from functools import update_wrapper
+
 pOrt = int(os.getenv("PORT", 3000))
 ASSETS_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -25,8 +29,49 @@ APPLICATION_NAME = "Farnborough Back End Application"
 #Connect to Database and create database session
 app = Flask(__name__)
 
-@app.route("/")
-    
+def crossdomain(origin=None, methods=None, headers=None,
+                max_age=21600, attach_to_all=True,
+                automatic_options=True):
+    if methods is not None:
+        methods = ', '.join(sorted(x.upper() for x in methods))
+    if headers is not None and not isinstance(headers, basestring):
+        headers = ', '.join(x.upper() for x in headers)
+    if not isinstance(origin, basestring):
+        origin = ', '.join(origin)
+    if isinstance(max_age, timedelta):
+        max_age = max_age.total_seconds()
+
+    def get_methods():
+        if methods is not None:
+            return methods
+
+        options_resp = current_app.make_default_options_response()
+        return options_resp.headers['allow']
+
+    def decorator(f):
+        def wrapped_function(*args, **kwargs):
+            if automatic_options and request.method == 'OPTIONS':
+                resp = current_app.make_default_options_response()
+            else:
+                resp = make_response(f(*args, **kwargs))
+            if not attach_to_all and request.method != 'OPTIONS':
+                return resp
+
+            h = resp.headers
+
+            h['Access-Control-Allow-Origin'] = origin
+            h['Access-Control-Allow-Methods'] = get_methods()
+            h['Access-Control-Max-Age'] = str(max_age)
+            if headers is not None:
+                h['Access-Control-Allow-Headers'] = headers
+            return resp
+
+        f.provide_automatic_options = False
+        return update_wrapper(wrapped_function, f)
+    return decorator
+
+
+@app.route("/")   
 @app.route("/status")
 def get_status():
     conn = Connect()
@@ -43,6 +88,7 @@ def get_vcap():
 
     
 @app.route("/MB")
+@crossdomain(origin='*')
 def get_con():
     conn = Connect()       
     #print conn
@@ -56,6 +102,7 @@ def get_con():
 #return render_template("postgres.html", postgres_data=postgres_info)
 
 @app.route("/MBAlt")
+@crossdomain(origin='*')
 def get_conA():
     conn = Connect()       
     #print conn
@@ -72,6 +119,7 @@ def get_conA():
     
 @app.route("/VTStock/<int:FW>")
 @app.route("/VTStock/<int:FW>/")
+@crossdomain(origin='*')
 def get_VTS(FW):
     conn = Connect()       
     #print conn
@@ -107,6 +155,7 @@ INNER JOIN MB h ON h.%(field17)s = g.%(field100)s;""" % d
     
 @app.route('/MB/<int:FW>')
 @app.route('/MB/<int:FW>/')
+@crossdomain(origin='*')
 def get_MB_weekly(FW):
 
     schem = "\"public\""
@@ -198,9 +247,6 @@ def fetchAsJSON(stringSQL):
     returnString = "[" + returnString[1:len(returnString)] + "]"
     return returnString
 
-
-def encode2JSONwDecimals(thisList):
-    return
         
     
     
