@@ -86,7 +86,98 @@ def get_vcap():
     message = os.environ["VCAP_SERVICES"]
     return message
 
-    
+
+@app.route("/Ops/<int:Or>")
+@app.route("/Ops/<int:Or>/")
+@crossdomain(origin='*')
+def get_Ops(Or):
+    conn = Connect()       
+    #print conn
+    cursor = conn.cursor()
+    schem = "\"public\""
+    tab = "\"MB51\""
+    d = dict(globals())
+    d.update(locals())
+    sql0="""WITH 
+Ops as (SELECT *
+FROM public."Coois_Ops_Archived")
+,Cnt as (SELECT "Order","Oper./Act.",
+Count("Entered by") as c
+FROM public."AFRU" 
+GROUP BY "Order", "Oper./Act.")
+SELECT Ops."Oper./Act." as "Op",
+Ops."Work cntr." as "WC",
+Ops."Operation short text" as "Operation",
+Ops."Op. Qty" as "Qty",
+Ops."Act/Op.UoM" as "UoM",
+Ops."System Status" as "Status",
+Ops."Processing" as "Std_Hrs",
+Ops."Conf. act. 3" as "Cnf_Hrs",
+Cnt.c as cnt,
+CASE WHEN (Cnt.c > 1) THEN 'inline-flex' ELSE 'none' END as c,
+CASE WHEN (Cnt.c < 2) THEN 'inline-flex' ELSE 'none' END as cneg
+FROM Ops INNER JOIN Cnt ON Ops."Order" = Cnt."Order" 
+and Ops."Oper./Act." = Cnt."Oper./Act."
+WHERE Ops."Op. Qty" > 1
+AND Ops."Order" = %(Or)s
+ORDER BY "Op";""" % d
+    colla = []
+    colla.append("Op")
+    colla.append("WC")
+    colla.append("Operation")
+    colla.append("Qty")
+    colla.append("UoM")
+    colla.append("Status")
+    colla.append("Std_Hrs")
+    colla.append("Conf_Hrs")
+    colla.append("cnt")
+    colla.append("c")
+    colla.append("cneg")
+    #print sql0
+    sql0=sql0 % globals()
+    message = fetchViewAsJSON(sql0,colla)
+    return message
+#return render_template("postgres.html", postgres_data=postgres_info)    
+
+
+@app.route("/Confs/<int:Or>")
+@app.route("/Confs/<int:Or>/")
+@crossdomain(origin='*')
+def get_Confs(Or):
+    conn = Connect()       
+    #print conn
+    cursor = conn.cursor()
+    schem = "\"public\""
+    tab = "\"MB51\""
+    d = dict(globals())
+    d.update(locals())
+    sql0="""SELECT "Order", "Oper./Act." as op, "Counter" as cnter, "Entered" as dat, "Entered by" as sso, "Plnt", "Confirmation text" as ctext, 
+       "Activity to Conf. 2" as sp, "Activity to Conf. 3" as lb, "Activity to Conf. 4" as rw, 
+       "Yield", "Scrap",  "Routing", "Type"
+  FROM public."AFRU"
+  WHERE "Order" = %(Or)s
+ORDER BY op;""" % d
+    colla = []
+    colla.append("Order")
+    colla.append("op")
+    colla.append("cnter")
+    colla.append("dat")
+    colla.append("sso")
+    colla.append("Plnt")
+    colla.append("ctext")
+    colla.append("sp")
+    colla.append("lb")
+    colla.append("rw")
+    colla.append("Yield")
+    colla.append("Scrap")
+    colla.append("Routing")
+    colla.append("Type")
+    #print sql0
+    sql0=sql0 % globals()
+    message = fetchViewAsJSON(sql0,colla)
+    return message
+
+
 @app.route("/MB")
 @crossdomain(origin='*')
 def get_con():
@@ -116,11 +207,11 @@ def get_conA():
     message = fetchAsJSON(sql0)
     return message
 
-    
-@app.route("/VTStock/<int:FW>")
-@app.route("/VTStock/<int:FW>/")
+
+@app.route("/VarStats/<int:FW>")
+@app.route("/VarStats/<int:FW>/")
 @crossdomain(origin='*')
-def get_VTS(FW):
+def get_VTP(FW):
     conn = Connect()       
     #print conn
     cursor = conn.cursor()
@@ -130,7 +221,7 @@ def get_VTS(FW):
     d = dict(globals())
     d.update(locals())
     sql0="""WITH 
-PVar as (SELECT * 
+PVar as (SELECT *, ABS("Target/actual var#") as "Absolute" 
 FROM %(schem)s.%(tab1)s
 WHERE %(field100)s < 59999999 
 AND TRIM(%(field102)s) IN ('Labor','Machine','Setup','Rework','Direct Material - OFT Hardware - 537', 'Other Purchase Mat & Svc HW/SW') 
@@ -143,16 +234,253 @@ AND EXTRACT(WEEK FROM %(field12)s) = %(FW)f
 AND %(field8)s= '101' 
 AND %(field17)s IS NOT NULL    
 AND %(field6)s = '6400' )    
-SELECT SUM( g.%(field105)s) as "To_Stock" 
-FROM Pvar g 
-INNER JOIN MB h ON h.%(field17)s = g.%(field100)s;""" % d
+SELECT 
+SUM( g.%(field106)s) as "netVar", 
+SUM( g.%(field106)s)/ SUM( g.%(field104)s) as "varPercent", 
+SUM( g.%(field105)s) as "ATo_Stock", 
+SUM( g.%(field104)s) as "PTo_Stock",
+SUM( g."Absolute") as "absVar"
+FROM PVar g 
+INNER JOIN MB h 
+ON h.%(field17)s = g.%(field100)s;""" % d
+    #print sql0
     colla = []
-    colla.append("To_Stock")
+    colla.append("netVar")
+    colla.append("varPercent")
+    colla.append("ATo_Stock")
+    colla.append("PTo_Stock")
+    colla.append("absVar")
+    
+    #print sql0
+    sql0=sql0 % globals()
+    message = fetchViewAsJSON(sql0,colla)
+    return message
+
+
+@app.route("/StockStats")
+@app.route("/StockStats/")
+@crossdomain(origin='*')
+def get_VTStockStat():
+    conn = Connect()       
+    #print conn
+    cursor = conn.cursor()
+    schem = "\"public\""
+    tab2 = "\"MB51\""
+    tab1 = "\"Variance\""
+    d = dict(globals())
+    d.update(locals())
+    sql0="""WITH
+MaxPst AS ( SELECT max("Pstng Date")::date as P
+    FROM "public"."MB51"
+),
+PVar as (SELECT *
+FROM "public"."Variance"
+WHERE "WO" < 59999999
+AND TRIM("Cost Element (Text)") IN ('Labor','Machine','Setup','Rework','Direct Material - OFT Hardware - 537', 'Other Purchase Mat & Svc HW/SW')
+AND "Cost Elem#" > 0
+AND "Total act#costs" > 0),
+MB AS ( SELECT "Order", EXTRACT(WEEK FROM "Pstng Date") as "FW"
+FROM "public"."MB51"
+WHERE "Pstng Date" > ((SELECT P FROM MaxPst) - 56 - EXTRACT(DOW FROM (SELECT P FROM MaxPst))::integer )
+AND "MvT"= '101'
+AND "Order" IS NOT NULL
+AND "Order" < 59999999
+AND "Plnt" = '6400' ),
+sec as (SELECT
+prim."FW", 
+SUM(prim."Stock") as "Stock"
+FROM (SELECT h."Order", h."FW",
+SUM( g."Total target costs") as "Stock"
+FROM PVar g
+INNER JOIN MB h
+ON h."Order" = g."WO"
+GROUP BY "Order","FW"
+ORDER BY  "FW") prim
+GROUP BY prim."FW"),
+Smax as (SELECT MAX(sec."Stock") as F FROM sec )
+
+SELECT sec."FW",
+sec."Stock",
+sec."Stock"/(SELECT F FROM Smax) as "Mpercent"
+FROM sec;"""
+    #print sql0
+    colla = []
+    colla.append("FW")
+    colla.append("Stock")
+    colla.append("Mpercent")
+    #print sql0
+    sql0=sql0 % globals()
+    message = fetchViewAsJSON(sql0,colla)
+    return message
+
+
+@app.route("/Orders")
+@app.route("/Orders/")
+@crossdomain(origin='*')
+def get_Order():
+    conn = Connect()       
+    #print conn
+    cursor = conn.cursor()
+    schem = "\"public\""
+    tab2 = "\"MB51\""
+    tab1 = "\"Variance\""
+    d = dict(globals())
+    d.update(locals())
+    sql0="""WITH
+MaxPst AS ( SELECT max("Pstng Date")::date as P
+    FROM "public"."MB51"
+),
+PArch as (SELECT "Order"::numeric
+FROM "public"."Coois_Ops_Archived"),
+MB AS ( SELECT "Order", EXTRACT(WEEK FROM "Pstng Date") as "FW"
+FROM "public"."MB51"
+WHERE "Pstng Date" > ((SELECT P FROM MaxPst) - 56 - EXTRACT(DOW FROM (SELECT P FROM MaxPst))::integer )
+AND "MvT"= '101'
+AND "Order" IS NOT NULL
+AND "Order" < 59999999
+AND "Plnt" = '6400' )
+SELECT
+"Order"
+FROM MB
+WHERE "Order" NOT IN (SELECT "Order" FROM PArch)
+GROUP BY "Order"
+"""
+    #print sql0
+    colla = []
+    colla.append("Order")
     #print sql0
     sql0=sql0 % globals()
     message = fetchViewAsJSON(sql0,colla)
     return message
     
+    
+@app.route("/VarChart")
+@app.route("/VarChart/")
+@crossdomain(origin='*')
+def get_VTChart():
+    conn = Connect()       
+    #print conn
+    cursor = conn.cursor()
+    sql0="""WITH
+MaxPst AS ( SELECT max("Pstng Date")::date as P
+    FROM "public"."MB51"
+),
+PVar as (SELECT *
+FROM "public"."Variance"
+WHERE "WO" < 59999999
+AND TRIM("Cost Element (Text)") IN ('Labor','Machine','Setup','Rework','Direct Material - OFT Hardware - 537', 'Other Purchase Mat & Svc HW/SW')
+AND "Cost Elem#" > 0
+AND "Total act#costs" > 0),
+MB AS ( SELECT "Order", EXTRACT(WEEK FROM "Pstng Date") as "FW"
+FROM "public"."MB51"
+WHERE "Pstng Date" > ((SELECT P FROM MaxPst) - 56 - EXTRACT(DOW FROM (SELECT P FROM MaxPst))::integer )
+AND "MvT"= '101'
+AND "Order" IS NOT NULL
+AND "Order" < 59999999
+AND "Plnt" = '6400' )
+Select 
+sec."FW",
+SUM(NV) as negVariance,
+SUM(PV) as posVariance,
+(SUM(NV)+SUM(PV))/SUM("Stock") as varpercent
+FROM (SELECT
+prim."FW", 
+CASE WHEN prim."netVar" > 0 THEN prim."netVar" ELSE 0 END as NV, 
+CASE WHEN prim."netVar" < 0 THEN prim."netVar" ELSE 0 END as PV, 
+prim."Stock"
+FROM (SELECT h."Order", h."FW",
+SUM( g."Target/actual var#") as "netVar",
+SUM( g."Total target costs") as "Stock"
+FROM PVar g
+INNER JOIN MB h
+ON h."Order" = g."WO"
+GROUP BY "Order","FW"
+ORDER BY  "FW","netVar") prim
+) sec
+GROUP BY "FW";"""
+
+
+    colla = []
+    colla.append("FW")
+    colla.append("negVariance")
+    colla.append("posVariance")
+    colla.append("varpercent")
+    message = fetchViewAsJSON(sql0,colla)
+    return message
+    
+    
+@app.route("/VarTab/<int:FW>")
+@app.route("/VarTab/<int:FW>/")
+@crossdomain(origin='*')
+def get_VTTable(FW):
+    conn = Connect()       
+    #print conn
+    cursor = conn.cursor()
+    d = dict(globals())
+    d.update(locals())
+    sql0="""WITH MB AS (    SELECT * 
+FROM "public"."MB51" 
+WHERE EXTRACT(YEAR FROM "Pstng Date") = EXTRACT(YEAR FROM current_date) 
+AND EXTRACT(WEEK FROM "Pstng Date") = %(FW)s 
+AND "MvT"= '101' 
+AND "Order" IS NOT NULL    
+AND "Plnt" = '6400' ),
+PVar as (SELECT * 
+FROM "public"."Variance" 
+WHERE "WO" < 59999999 
+AND TRIM("Cost Element (Text)") IN ('Labor','Machine','Setup','Rework','Direct Material - OFT Hardware - 537', 'Other Purchase Mat & Svc HW/SW') 
+AND "Cost Elem#" > 0 
+AND "Total act#costs" > 0)
+
+SELECT  
+SUM(g."Target/actual var#")*-1 as Sum_Var
+,SUM(g."Other Purchased")*-1 as "External Services"
+,SUM(g."Rework")*-1 as "Rework"
+,SUM(g."Direct Material")*-1 as "Direct Material"
+,SUM(g."Labor")*-1 as "Labor"
+,h."Material Description"
+,h."Material"
+,g."WO"
+FROM (
+SELECT *,
+CASE "Cost Element (Text)" 
+WHEN 'Labor' THEN "Target/actual var#"
+ELSE 0 END as "Labor"
+,CASE "Cost Element (Text)" 
+WHEN 'Machine' THEN "Target/actual var#"
+ELSE 0 END as "Machine"
+,CASE "Cost Element (Text)" 
+WHEN 'Setup' THEN "Target/actual var#"
+ELSE 0 END as "Setup"
+,CASE "Cost Element (Text)" 
+WHEN 'Rework' THEN "Target/actual var#"
+ELSE 0 END as "Rework"
+,CASE "Cost Element (Text)" 
+WHEN 'Direct Material - OFT Hardware - 537' THEN "Target/actual var#"
+ELSE 0 END as "Direct Material"
+,CASE "Cost Element (Text)" 
+WHEN 'Other Purchase Mat & Svc HW/SW' THEN "Target/actual var#"
+ELSE 0 END as "Other Purchased" 
+FROM PVar) g
+INNER JOIN MB h
+ON h."Order" = g."WO" 
+WHERE  g."WO" < 59999999
+GROUP BY g."WO", h."Material", h."Material Description"
+ORDER BY Sum_Var asc
+ """  % d
+    colla = []
+    colla.append("Sum_Var")
+    colla.append("External Services")
+    colla.append("Rework")
+    colla.append("Direct Material")
+    colla.append("Labor")
+    colla.append("Material Description")
+    colla.append("Material")
+    colla.append("WO")  
+    message = fetchViewAsJSON(sql0,colla)
+    return message
+   
+
 @app.route('/MB/<int:FW>')
 @app.route('/MB/<int:FW>/')
 @crossdomain(origin='*')
@@ -247,9 +575,6 @@ def fetchAsJSON(stringSQL):
     returnString = "[" + returnString[1:len(returnString)] + "]"
     return returnString
 
-        
-    
-    
 
 if __name__ == '__main__':
   app.secret_key = 'super_secret_key'

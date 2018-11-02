@@ -1,0 +1,16 @@
+WITH 
+Ops as (SELECT *
+FROM public."Coois_Ops_Archived")
+,Cnt as (SELECT "Order","Oper./Act.",Count(*) 
+FROM public."AFRU" 
+GROUP BY "Order", "Oper./Act.")
+SELECT Ops."Oper./Act.",
+Ops."Work cntr.",
+Ops."Operation short text",
+Ops."Op. Qty",
+Ops."Act/Op.UoM",
+Ops."System Status",
+Ops.*
+FROM Ops INNER JOIN Cnt ON Ops."Order" = Cnt."Order" 
+and Ops."Oper./Act." = Cnt."Oper./Act."
+WHERE Ops."Op. Qty" > 1
